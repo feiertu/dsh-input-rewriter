@@ -27,7 +27,13 @@ DeepSeek Harness（dsh）插件：在**发送前**用提示词工程 playbook �
 - `git`（从 GitHub / Git 源安装时需要）
 - Node.js ≥ 20
 
-### 从 GitHub 仓库安装（推荐）
+### 从 npm 安装（推荐）
+
+```bash
+dsh plugin --profile web add dsh-input-rewriter
+```
+
+### 从 GitHub 仓库安装
 
 ```bash
 dsh plugin --profile web add github:feiertu/dsh-input-rewriter
@@ -55,10 +61,10 @@ DSH 插件即一个 npm 包（也可来自 Git 仓库 / 本地目录），通过
 
 | 渠道 | 安装命令 | 状态 |
 |---|---|---|
-| GitHub 仓库 | `dsh plugin --profile web add github:feiertu/dsh-input-rewriter` | ✅ 当前 |
+| npm registry | `dsh plugin --profile web add dsh-input-rewriter` | ✅ 已发布 |
+| GitHub 仓库 | `dsh plugin --profile web add github:feiertu/dsh-input-rewriter` | ✅ 可用 |
 | Git URL | `dsh plugin --profile web add git+https://github.com/feiertu/dsh-input-rewriter.git` | ✅ 可用 |
 | 本地目录 | `dsh plugin --profile web add .` | ✅ 开发调试 |
-| npm registry | `dsh plugin --profile web add dsh-input-rewriter`（`npm publish` 后） | ⏳ 可选 |
 | 插件市场 | 向 `awesome-dsh-plugin/awesome-dsh-plugin` 提交 PR 收录 | ⏳ 可选 |
 
 已挂 GitHub topic：`dsh-plugin`（https://github.com/topics/dsh-plugin）。
