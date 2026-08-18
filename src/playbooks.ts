@@ -7,14 +7,10 @@
 
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { SCENES, type SceneMeta } from './rewrite/engine'
+import { SCENES } from './rewrite/engine'
+import type { Playbook } from './core'
 
 const SKILLS_DIR = new URL('../skills/', import.meta.url)
-
-export interface Playbook {
-  scene: SceneMeta
-  content: string
-}
 
 /** 读入全部场景 playbook（Markdown 原文），失败即抛，保证 misconfiguration fail-loud。 */
 export async function loadPlaybooks(): Promise<readonly Playbook[]> {

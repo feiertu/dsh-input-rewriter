@@ -16,7 +16,7 @@ import {
   REWRITE_MODEL_SETTINGS_SCHEMA,
   type RewriteModelSettings,
 } from '../settings'
-import type { Playbook } from '../playbooks'
+import type { Playbook } from '../core'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
