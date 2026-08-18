@@ -34,7 +34,7 @@ const HOST_EXTERNALS = [
 export default defineConfig([
   {
     // 宿主面（Node 进程，完整 Cordis 插件）
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', core: 'src/core.ts' },
     outDir: 'lib',
     format: 'esm',
     platform: 'node',
