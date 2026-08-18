@@ -1,0 +1,7 @@
+# 输入重写插件 —— bundle 组合层
+# 通过 `dsh plugin --profile web add <pkg>` 安装后进入 profile 层栈（重启 web 生效）。
+# 后层按 id 覆盖前层；config 为整段替换（非深合并）。
+- insert:
+    - id: input-rewriter
+      name: dsh-input-rewriter
+      config: {}
