@@ -20,13 +20,48 @@ DeepSeek Harness（dsh）插件：在**发送前**用提示词工程 playbook �
 
 ## 安装
 
+### 环境准备
+
+- `dsh`（`dsh --version` 验证）
+- `pnpm` ≥ 10（`dsh plugin` 底层把参数转发给 pnpm 在 profile 目录执行）
+- `git`（从 GitHub / Git 源安装时需要）
+- Node.js ≥ 20
+
+### 从 GitHub 仓库安装（推荐）
+
 ```bash
 dsh plugin --profile web add github:feiertu/dsh-input-rewriter
 ```
 
-（等价写法：`dsh plugin --profile web add git+https://github.com/feiertu/dsh-input-rewriter.git`）
+等价 Git URL 写法：`dsh plugin --profile web add git+https://github.com/feiertu/dsh-input-rewriter.git`
 
-插件以 git 源方式安装；`lib/` 构建产物已随仓库提交，安装时无需构建。
+### 本地目录安装（开发调试）
+
+在插件源码根目录执行：
+
+```bash
+dsh plugin --profile web add .
+```
+
+### 生效
+
+安装成功后，`dsh` 会自动把本插件（声明了 `dsh.bundle.patch`）挂载进 `dsh.profile.bundles`，**重启 `dsh web` 并刷新浏览器**即可生效；可用 `dsh --profile web --dump-config` 验证插件已进入配置树。
+
+> 本插件 `lib/` 构建产物已随仓库提交，且无 `prepare` 脚本，从 Git 源安装时**无需**在 `pnpm-workspace.yaml` 配置 `allowBuilds`；安装中出现的 `missing peer` 警告（`@deepseek-ai/cordis`、`react` 等）由 DSH 宿主运行时提供，可忽略，命令末尾出现 `Done` 即安装成功。
+
+## 发布与分发
+
+DSH 插件即一个 npm 包（也可来自 Git 仓库 / 本地目录），通过 `package.json` 的 `dsh` 字段声明能力。本插件按此约定分发：
+
+| 渠道 | 安装命令 | 状态 |
+|---|---|---|
+| GitHub 仓库 | `dsh plugin --profile web add github:feiertu/dsh-input-rewriter` | ✅ 当前 |
+| Git URL | `dsh plugin --profile web add git+https://github.com/feiertu/dsh-input-rewriter.git` | ✅ 可用 |
+| 本地目录 | `dsh plugin --profile web add .` | ✅ 开发调试 |
+| npm registry | `dsh plugin --profile web add dsh-input-rewriter`（`npm publish` 后） | ⏳ 可选 |
+| 插件市场 | 向 `awesome-dsh-plugin/awesome-dsh-plugin` 提交 PR 收录 | ⏳ 可选 |
+
+已挂 GitHub topic：`dsh-plugin`（https://github.com/topics/dsh-plugin）。
 
 ## 构建
 
