@@ -21,8 +21,12 @@ DeepSeek Harness（dsh）插件：在**发送前**用提示词工程 playbook �
 ## 安装
 
 ```bash
-dsh plugin --profile web add <pkg>
+dsh plugin --profile web add github:feiertu/dsh-input-rewriter
 ```
+
+（等价写法：`dsh plugin --profile web add git+https://github.com/feiertu/dsh-input-rewriter.git`）
+
+插件以 git 源方式安装；`lib/` 构建产物已随仓库提交，安装时无需构建。
 
 ## 构建
 
