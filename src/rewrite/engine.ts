@@ -3,8 +3,6 @@
  * 文本提取与 finish 校验。不碰 I/O，便于单测与复用。
  */
 
-import type { ContentBlock, FinishReason } from '@deepseek-ai/dsh-llm'
-
 /** 场景 id，与 skills/*.md 的 playbook 一一对应。 */
 export type SceneId = 'daily-life' | 'work' | 'academic' | 'coding' | 'creative' | 'security-audit' | 'general'
 
@@ -113,28 +111,6 @@ const OUTPUT_CONSTRAINT = [
 /** 把选中的 playbook 内容组装成一次调用用的系统 prompt。 */
 export function buildSystemPrompt(playbooks: readonly string[]): string {
   return PREAMBLE + playbooks.join('\n\n---\n\n') + OUTPUT_CONSTRAINT
-}
-
-/** 从组装后的 ContentBlock 里提取纯文本（过滤图片/工具调用等非文本块）。 */
-export function extractText(blocks: readonly ContentBlock[]): string {
-  return blocks
-    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-    .map((block) => block.text)
-    .join(' ')
-    .trim()
-}
-
-/** 把终态 finish reason 映射为失败错误（stop/tool-calls 视为成功）。 */
-export function finishError(finish: FinishReason): Error | undefined {
-  switch (finish.kind) {
-    case 'error':
-    case 'aborted':
-      return new Error(finish.failure.message)
-    case 'max-tokens':
-      return new Error('改写结果被 token 上限截断')
-    default:
-      return undefined
-  }
 }
 
 // ---------------------------------------------------------------------------

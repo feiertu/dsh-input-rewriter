@@ -6,8 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
-import { extractText, finishError } from './engine'
+import type { ContentBlock, FinishReason, GenerateOptions } from '@deepseek-ai/dsh-llm'
 
 /** 一次改写生成的入参（已解析 provider/model，与 UI/会话无关）。 */
 export interface RewriteGenerationInput {
@@ -28,6 +27,28 @@ export interface RewriteGenerationInput {
 export type RewriteGeneration =
   | { ok: true; text: string }
   | { ok: false; code: 'llm-failed' | 'empty-result' | 'timeout'; message: string }
+
+/** 从组装后的 ContentBlock 里提取纯文本（过滤图片/工具调用等非文本块）。 */
+function extractText(blocks: readonly ContentBlock[]): string {
+  return blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
+    .join(' ')
+    .trim()
+}
+
+/** 把终态 finish reason 映射为失败错误（stop/tool-calls 视为成功）。 */
+function finishError(finish: FinishReason): Error | undefined {
+  switch (finish.kind) {
+    case 'error':
+    case 'aborted':
+      return new Error(finish.failure.message)
+    case 'max-tokens':
+      return new Error('改写结果被 token 上限截断')
+    default:
+      return undefined
+  }
+}
 
 /** 执行一次改写生成。 */
 export async function generateRewrite(input: RewriteGenerationInput): Promise<RewriteGeneration> {
