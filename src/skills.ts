@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // 仅引入类型以激活 `Context.skills` 增强。
 import type {} from '@deepseek-ai/dsh-skill'
-import type { Playbook } from './playbooks'
+import type { Playbook } from './core'
 
 /** 把 playbook 注册为运行时 skill（name 形如 `input-rewrite-<scene>`）。 */
 export function registerPlaybookSkills(ctx: Context, playbooks: readonly Playbook[]): void {

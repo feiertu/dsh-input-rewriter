@@ -1,5 +1,5 @@
 /**
- * 改写服务：暴露 `ctx.rewrite`，聚合场景识别、模型选择、设置持久化与单次改写。
+ * 改写服务：暴露 `ctx.rewrite`，聚合模型选择持久化与框架无关改写核心。
  * 模型选择经 `installSettingsSection` 可选叠加在 settings 服务之上，未挂载时回落
  * 到插件 Config 的组合默认值；两者都缺省时改写返回 `no-model`。
  */
@@ -8,15 +8,15 @@ import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
 import { installSettingsSection } from '@deepseek-ai/dsh-settings'
-import { buildSystemPrompt, buildUserText, detectScenes, recombine, splitInput, type SceneId } from './engine'
-import { generateRewrite, type RewriteGeneration } from './llm'
+import { createRewriter, type Playbook, type Rewriter } from '../core'
+import { dshLlmLike } from './llm'
+import type { SceneId } from './engine'
 import {
   isModelSelectionConfigured,
   REWRITE_MODEL_SETTINGS_NAMESPACE,
   REWRITE_MODEL_SETTINGS_SCHEMA,
   type RewriteModelSettings,
 } from '../settings'
-import type { Playbook } from '../playbooks'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -39,22 +39,24 @@ export interface RewriteServiceConfig {
 }
 
 export class RewriteService extends Service {
-  private readonly maxOutputTokens: number
-  private readonly timeoutMs: number
-  private readonly playbookContentById: ReadonlyMap<SceneId, string>
+  private readonly rewriter: Rewriter
   private source: () => RewriteModelSettings
 
   constructor(ctx: Context, config: RewriteServiceConfig) {
     super(ctx, 'rewrite')
-    this.maxOutputTokens = config.maxOutputTokens
-    this.timeoutMs = config.timeoutMs
-    this.playbookContentById = new Map(config.playbooks.map((playbook) => [playbook.scene.id, playbook.content]))
 
     const entry: RewriteModelSettings = { provider: config.provider, model: config.model }
     this.source = () => entry
     installSettingsSection(ctx, REWRITE_MODEL_SETTINGS_NAMESPACE, REWRITE_MODEL_SETTINGS_SCHEMA, entry, {
       setSource: (current) => { this.source = current },
       onChange: () => { /* 值已由 setSource 捕获，无额外副作用 */ },
+    })
+
+    this.rewriter = createRewriter({
+      llm: dshLlmLike(ctx, () => this.source()),
+      playbooks: config.playbooks,
+      maxOutputTokens: config.maxOutputTokens,
+      timeoutMs: config.timeoutMs,
     })
   }
 
@@ -84,38 +86,12 @@ export class RewriteService extends Service {
     return result
   }
 
-  /** 核心：识别命中场景（可多场景综合），装配相关 playbook，单次调用改写原始输入。 */
+  /** 核心：检查模型选择后委托框架无关 rewriter 做单次改写。 */
   async rewrite(text: string, signal?: AbortSignal): Promise<RewriteResult> {
     const selection = this.source()
     if (!isModelSelectionConfigured(selection)) {
       return { ok: false, code: 'no-model', message: '尚未配置改写模型，请在设置中选择' }
     }
-
-    const scenes = detectScenes(text)
-    const system = buildSystemPrompt(
-      scenes
-        .map((id) => this.playbookContentById.get(id))
-        .filter((content): content is string => content !== undefined),
-    )
-
-    // 分段：附件（代码块/多行 JSON/长 token）不进改写模型，改写后逐字拼回。
-    const { instruction, attachments } = splitInput(text)
-    const userText = buildUserText(instruction, attachments)
-
-    const result: RewriteGeneration = await generateRewrite({
-      ctx: this.ctx,
-      provider: selection.provider,
-      model: selection.model,
-      system,
-      userText,
-      maxOutputTokens: this.maxOutputTokens,
-      timeoutMs: this.timeoutMs,
-      signal,
-    })
-
-    if (!result.ok) {
-      return result
-    }
-    return { ok: true, rewritten: recombine(result.text, attachments), scenes }
+    return this.rewriter.rewrite(text, signal)
   }
 }
