@@ -58,14 +58,32 @@ dsh plugin --profile web add dsh-input-rewriter
 
 样本存在插件目录的 `data/finetune.jsonl` 里。注意：每存一条都要让模型多跑一次「反推上下文」的标注，会额外花一点 token。
 
-## 常见问题
+## 项目代码结构
 
-**装完没反应怎么办？**
-- 确认已经重启了 `dsh web`，并且刷新了浏览器。
-- 确认在设置里已经选了改写模型。
+```
+src/                    宿主面（Node 进程，完整 Cordis 插件）
+├── index.ts            插件入口：加载 playbook → 注册 ctx.rewrite 服务 → 注册 RPC
+├── core.ts             框架无关改写核心（LlmLike 抽象 + createRewriter），零 dsh 依赖
+├── playbooks.ts        加载 skills/*.md 的 playbook 原文
+├── skills.ts           把 playbook 注册为 dsh skill（name 形如 input-rewrite-<scene>）
+├── settings.ts         设置命名空间与 schema（provider/model + 采集开关）
+├── rpc.ts              宿主↔浏览器 RPC 通道 /input-rewriter
+└── rewrite/
+    ├── engine.ts       纯函数面：场景识别、系统 prompt 组装、附件分段与拼回
+    ├── llm.ts          把 ctx.llm.stream 包装成框架无关的 LlmLike
+    ├── service.ts      RewriteService：聚合模型选择、改写、采集、导出
+    └── annotate.ts     采集纯函数：注释 prompt、语气动词清单、JSONL 序列化
 
-**它什么时候会改写？**
-- 你停止输入大约 2 秒后，它会自动改写一次；继续改就继续更新。
+client/                 浏览器面
+└── index.tsx           输入框改写 dock + 设置板块（模型选择、采集开关、导出）
 
-**它会不会把我的问题改得面目全非？**
-- 不会。它只补全目标、结构和要求，你的原意、你贴的代码和长文本都会被保留。
+skills/                 7 份 playbook（Markdown，对应 7 个场景）
+data/                   微调样本目录（finetune.jsonl，采集时自动写入）
+test/                   单元测试（annotate / core / engine）
+lib/                    编译产物（lib/index.js 宿主面、lib/client.js 浏览器面）
+```
+
+- **宿主面**：`src/`，跑在 Node 进程里，负责改写核心逻辑、模型调用、样本落盘。
+- **浏览器面**：`client/index.tsx`，跑在 dsh 的 web 沙箱里，负责输入框 UI 和设置页。
+- **核心与适配分离**：`core.ts` 完全不依赖 dsh，可独立复用；`rewrite/llm.ts` 只做 dsh → LlmLike 的适配。
+- **采集独立于改写主链路**：`annotate.ts` 的纯函数不碰 I/O，任何失败静默丢弃，不影响改写与发送。
