@@ -14,6 +14,7 @@ DeepSeek Harness（dsh）插件：在**发送前**用提示词工程 playbook �
 - **多提问不丢信息**：多个问题逐一保留、编号、保序，只补约束与回答格式，绝不擅自合并或删改语义。。
 - **安全**：插件只保存 `{ provider, model }` 选择值，不接触任何 API key 明文。
 - **对外可复用**：改写引擎暴露为可注入服务 `ctx.rewrite`；每份 playbook 注册为 dsh 原生 skill（`input-rewrite-<scene>`），供其它插件 / 技能直接复用。
+- **框架无关核心**：改写引擎抽成零 dsh 依赖的 `dsh-input-rewriter/core` 子入口，暴露 `createRewriter` + `LlmLike`；外部 agent（MCP / CLI / HTTP 薄壳）无需安装任何 dsh 依赖即可复用同一套改写能力。
 - **健壮**：全链路异常处理（超时 / 取消 / 空结果 / 未选模型 / 传输失败），playbook 加载 fail-loud，HMR 干净卸载。
 - **其他**：支持通过源码增删改查skill逻辑
 
@@ -69,13 +70,6 @@ DSH 插件即一个 npm 包（也可来自 Git 仓库 / 本地目录），通过
 
 已挂 GitHub topic：`dsh-plugin`（https://github.com/topics/dsh-plugin）。
 
-## 构建
-
-```bash
-pnpm install
-pnpm build   # tsdown → lib/index.js（宿主 ESM）+ lib/client.js（浏览器 CJS bundle）
-```
-
 ## 配置
 
 插件可选 `Config`：
@@ -108,14 +102,16 @@ pnpm build   # tsdown → lib/index.js（宿主 ESM）+ lib/client.js（浏览�
 ```
 src/                  # 宿主面（Node）
   index.ts            # 入口 apply()：加载 playbook → new RewriteService(ctx) 提供 ctx.rewrite → 注册 skill/RPC
+  core.ts             # 框架无关改写核心：LlmLike + createRewriter（零 dsh 依赖，./core 子入口）
   rpc.ts              # /input-rewriter RPC 通道（rewrite/models/getModel/setModel）
   rewrite/
-    engine.ts         # 场景 taxonomy + 多场景识别 + 附件分段 + 系统 prompt 组装 + 文本提取
-    llm.ts            # ctx.llm.stream 封装（流式组装 + 超时/取消）
-    service.ts        # RewriteService → ctx.rewrite（改写 / 模型枚举 / 选择持久化）
+    engine.ts         # 场景 taxonomy + 多场景识别 + 附件分段 + 系统 prompt 组装（纯函数）
+    llm.ts            # dshLlmLike：ctx.llm.stream 封装（流式组装 + finish 校验 + 文本提取）
+    service.ts        # RewriteService → ctx.rewrite（委托 createRewriter / 模型枚举 / 选择持久化）
   settings.ts         # 改写模型 settings namespace（input-rewriter）
   skills.ts           # playbook → dsh 原生 skill
   playbooks.ts        # 读 skills/*.md（fail-loud）
+test/                 # vitest 单测（engine 纯函数 + core 全链路）
 client/               # 浏览器面（沙箱）
   index.tsx           # 改写预览条 + 改写模型设置段（两个 slot）
 skills/               # 提示词库 playbook（7 场景各一份）
