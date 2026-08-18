@@ -14,6 +14,8 @@ import {
   type SceneId,
   type SceneMeta,
 } from './rewrite/engine'
+export { SCENES } from './rewrite/engine'
+export type { SceneId, SceneMeta } from './rewrite/engine'
 
 /** 调用方提供的单次文本生成能力（框架无关；具体 SDK 由调用方适配）。 */
 export interface LlmLike {

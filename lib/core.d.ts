@@ -16,6 +16,7 @@ interface SceneMeta {
   /** skills/ 目录下的 playbook 文件名。 */
   file: string;
 }
+declare const SCENES: readonly SceneMeta[];
 //#endregion
 //#region src/core.d.ts
 /** 调用方提供的单次文本生成能力（框架无关；具体 SDK 由调用方适配）。 */
@@ -56,4 +57,4 @@ interface Rewriter {
 /** 组装框架无关的改写器：全链路（场景识别→附件分段→拼 playbook→调 LLM→拼回）。 */
 declare function createRewriter(options: CreateRewriterOptions): Rewriter;
 //#endregion
-export { CoreRewriteResult, CreateRewriterOptions, LlmLike, Playbook, Rewriter, createRewriter };
+export { CoreRewriteResult, CreateRewriterOptions, LlmLike, Playbook, Rewriter, SCENES, type SceneId, type SceneMeta, createRewriter };

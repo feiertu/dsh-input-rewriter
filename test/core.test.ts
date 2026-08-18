@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRewriter, type LlmLike, type Playbook } from '../src/core'
-import { SCENES } from '../src/rewrite/engine'
+import { createRewriter, SCENES, type LlmLike, type Playbook } from '../src/core'
 
 const playbooks: readonly Playbook[] = SCENES.map((scene) => ({ scene, content: `PLAYBOOK_${scene.id}` }))
 
@@ -8,6 +7,11 @@ const okLlm = (text: string): LlmLike => ({ complete: async () => text })
 
 describe('createRewriter.rewrite', () => {
   afterEach(() => { vi.useRealTimers() })
+
+  it('从 core 导出 SCENES 供外部消费者构建 playbook', () => {
+    expect(SCENES).toHaveLength(7)
+    expect(SCENES.map((s) => s.id)).toContain('general')
+  })
 
   it('命中场景并返回改写结果', async () => {
     const rewriter = createRewriter({ llm: okLlm('改写后'), playbooks })
