@@ -14,6 +14,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 // 激活 SlotMap 增强：'conversation.input.dock' / 'settings.section' 键与
 // 会话标准道具（useInput/inputActions）、设置段 owner 道具（close）。
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -95,6 +96,28 @@ function decodeModel(value: string): ModelSelection | null {
   }
 }
 
+/** 从用户消息的 ContentBlock 里抽取纯文本（过滤图片/工具调用等非文本块）。 */
+function extractUserText(blocks: readonly ContentBlock[]): string {
+  return blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
+    .join(' ')
+    .trim()
+}
+
+/** 触发浏览器下载一段文本为 .jsonl 文件。 */
+function downloadJsonl(content: string): void {
+  const blob = new Blob([content], { type: 'application/x-ndjson' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'input-rewriter-finetune.jsonl'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 // ---------------------------------------------------------------------------
 // 改写预览条（conversation.input.dock）
 // ---------------------------------------------------------------------------
@@ -103,7 +126,7 @@ type DockProps = PropsRuntime<'conversation.input.dock'>
 
 /** 创建关闭了 ctx 的改写预览条组件。 */
 function createDock(ctx: Context) {
-  return function InputRewriterDock({ input, inputActions }: DockProps) {
+  return function InputRewriterDock({ input, inputActions, session }: DockProps) {
     const [busy, setBusy] = useState(false)
     const [preview, setPreview] = useState<{ original: string; rewritten: string } | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -112,6 +135,12 @@ function createDock(ctx: Context) {
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const controllerRef = useRef<AbortController | null>(null)
     const dismissedRef = useRef<string | null>(null)
+
+    // 采集相关：已处理的最新用户消息 seq、「发送改写」去重标记与其自愈定时器。
+    const initializedRef = useRef(false)
+    const lastSentSeqRef = useRef<number | null>(null)
+    const sentViaRewriteRef = useRef(false)
+    const sentViaRewriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const draft = input.draft
     // 草稿在改写后又被编辑过：预览失效，隐藏（不再展示过期的改写结果）。
@@ -143,6 +172,14 @@ function createDock(ctx: Context) {
       }
     }, [ctx])
 
+    // 采集微调样本（fire-and-forget）：失败静默忽略，不阻塞改写/发送主链路。
+    const collect = useCallback((output: string): void => {
+      if (output.trim().length === 0) return
+      void connection(ctx).rpc.call(RPC_CHANNEL, 'collect', { output }).catch(() => {
+        // 采集失败无副作用，静默丢弃该样本。
+      })
+    }, [ctx])
+
     // 草稿停止变化 DEBOUNCE_MS 后自动触发改写；变化期间取消在途请求、复位 busy。
     useEffect(() => {
       const text = draft.trim()
@@ -161,8 +198,37 @@ function createDock(ctx: Context) {
       return () => { clearTimeout(timer) }
     }, [draft, preview, runRewrite])
 
+    // 观察发送：session.nodes 出现新的 user/steering 消息即视为一次发送，采集原文。
+    useEffect(() => {
+      const userNodes = session.nodes.filter((node) => node.kind === 'user' || node.kind === 'steering')
+      const lastSeq = userNodes.length === 0 ? null : userNodes[userNodes.length - 1].seq
+      if (!initializedRef.current) {
+        // 首次挂载只记录当前最新一条，不采集历史消息（含全新会话的空状态）。
+        initializedRef.current = true
+        lastSentSeqRef.current = lastSeq
+        return
+      }
+      if (lastSeq === null || lastSeq === lastSentSeqRef.current) return
+      lastSentSeqRef.current = lastSeq
+      // 「发送改写」已在 sendRewritten 里采集原文，这里跳过避免重复。
+      if (sentViaRewriteRef.current) {
+        sentViaRewriteRef.current = false
+        if (sentViaRewriteTimerRef.current !== null) {
+          clearTimeout(sentViaRewriteTimerRef.current)
+          sentViaRewriteTimerRef.current = null
+        }
+        return
+      }
+      collect(extractUserText(userNodes[userNodes.length - 1].content))
+    }, [session.nodes, collect])
+
     const sendRewritten = (): void => {
       if (effective === null) return
+      // 标记本次为「发送改写」：观察器据此跳过，避免重复采集；原文在此处采集。
+      sentViaRewriteRef.current = true
+      if (sentViaRewriteTimerRef.current !== null) clearTimeout(sentViaRewriteTimerRef.current)
+      sentViaRewriteTimerRef.current = setTimeout(() => { sentViaRewriteRef.current = false }, 5000)
+      collect(effective.original)
       inputActions.setDraft(effective.rewritten)
       inputActions.submit()
     }
@@ -211,6 +277,9 @@ function createModelSection(ctx: Context) {
     const [selection, setSelection] = useState<string>('')
     const [busy, setBusy] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [collectEnabled, setCollectEnabled] = useState(false)
+    const [exportBusy, setExportBusy] = useState(false)
+    const [collectPath, setCollectPath] = useState<string | null>(null)
 
     useEffect(() => {
       let cancelled = false
@@ -232,6 +301,12 @@ function createModelSection(ctx: Context) {
           if (cancelled) return
           if (currentOutcome.ok && isModelSelection(currentOutcome.value)) {
             setSelection(encodeModel(currentOutcome.value.provider, currentOutcome.value.model))
+          }
+
+          const collectOutcome = await conn.rpc.call(RPC_CHANNEL, 'getCollect', null)
+          if (cancelled) return
+          if (collectOutcome.ok && typeof collectOutcome.value === 'boolean') {
+            setCollectEnabled(collectOutcome.value)
           }
         } catch (err) {
           if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -259,6 +334,43 @@ function createModelSection(ctx: Context) {
         setError(err instanceof Error ? err.message : String(err))
       } finally {
         setBusy(false)
+      }
+    }
+
+    const onToggleCollect = async (next: boolean): Promise<void> => {
+      setCollectEnabled(next)
+      try {
+        const outcome = await connection(ctx).rpc.call(RPC_CHANNEL, 'setCollect', { enabled: next })
+        if (!outcome.ok) {
+          setCollectEnabled(!next)
+          setError(outcome.error.message)
+        }
+      } catch (err) {
+        setCollectEnabled(!next)
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    }
+
+    const onExport = async (): Promise<void> => {
+      setExportBusy(true)
+      setError(null)
+      try {
+        const outcome = await connection(ctx).rpc.call(RPC_CHANNEL, 'export', null)
+        if (!outcome.ok) {
+          setError(outcome.error.message)
+          return
+        }
+        const value = outcome.value as { content?: unknown; path?: unknown } | null
+        if (typeof value?.content !== 'string') {
+          setError('导出内容解析失败')
+          return
+        }
+        if (typeof value.path === 'string') setCollectPath(value.path)
+        downloadJsonl(value.content)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setExportBusy(false)
       }
     }
 
@@ -295,6 +407,22 @@ function createModelSection(ctx: Context) {
             )}
         {error !== null && <div style={errorStyle}>{error}</div>}
         <p style={mutedStyle}>选中的模型仅用于「输入改写」，不会改变对话主模型。</p>
+
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={collectEnabled}
+            onChange={(event) => { void onToggleCollect(event.currentTarget.checked) }}
+          />
+          <span>采集对话用于微调（模仿用户口吻）</span>
+        </label>
+        <p style={mutedStyle}>开启后，每次发送都会把「原文 → 以用户语气〈动词〉」样本追加写入本机文件，供导出微调。</p>
+        <div>
+          <button type="button" onClick={() => { void onExport() }} disabled={exportBusy} style={secondaryBtnStyle}>
+            {exportBusy ? '导出中…' : '导出微调数据（.jsonl）'}
+          </button>
+        </div>
+        {collectPath !== null && <p style={mutedStyle}>本机文件：{collectPath}</p>}
       </div>
     )
   }
@@ -399,4 +527,25 @@ const selectStyle: CSSProperties = {
   background: 'var(--dsw-specific-input-major)',
   color: 'var(--dsw-alias-label-primary)',
   fontSize: 13,
+}
+
+const checkboxRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 13,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-primary)',
+  cursor: 'pointer',
+}
+
+const secondaryBtnStyle: CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--dsw-alias-border-l2)',
+  background: 'var(--dsw-specific-input-major)',
+  color: 'var(--dsw-alias-label-primary)',
+  cursor: 'pointer',
+  fontSize: 13,
+  lineHeight: '18px',
 }

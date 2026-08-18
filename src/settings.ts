@@ -9,16 +9,18 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 /** 改写模型设置命名空间。 */
 export const REWRITE_MODEL_SETTINGS_NAMESPACE = settingsNamespace('input-rewriter')
 
-/** 设置段内容；provider/model 缺省表示尚未选择改写模型。 */
+/** 设置段内容；provider/model 缺省表示尚未选择改写模型，collectEnabled 控制是否采集微调样本。 */
 export interface RewriteModelSettings {
   provider?: string
   model?: string
+  collectEnabled?: boolean
 }
 
-/** 设置段 schema（字段可选，允许「未选择」状态）。 */
+/** 设置段 schema（provider/model 允许「未选择」状态；collectEnabled 缺省关闭）。 */
 export const REWRITE_MODEL_SETTINGS_SCHEMA: z<RewriteModelSettings> = z.object({
   provider: z.string(),
   model: z.string(),
+  collectEnabled: z.boolean().default(false),
 })
 
 /** 是否已构成可用选择（provider 与 model 均非空）。 */

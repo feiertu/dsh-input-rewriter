@@ -62,6 +62,29 @@ export function registerRewriteRpc(ctx: Context): void {
             await ctx.rewrite.saveSelection({ provider: next.provider, model: next.model })
             return { ok: true, value: { provider: next.provider, model: next.model } }
           }
+          case 'collect': {
+            const output = (payload as { output?: unknown } | null)?.output
+            if (typeof output !== 'string' || output.trim().length === 0) {
+              return badRequest('collect: output must be a non-empty string')
+            }
+            const collected = await ctx.rewrite.collect(output)
+            return { ok: true, value: { collected } }
+          }
+          case 'export': {
+            const exported = await ctx.rewrite.exportCollected()
+            return { ok: true, value: exported }
+          }
+          case 'getCollect': {
+            return { ok: true, value: ctx.rewrite.isCollectionEnabled() }
+          }
+          case 'setCollect': {
+            const enabled = (payload as { enabled?: unknown } | null)?.enabled
+            if (typeof enabled !== 'boolean') {
+              return badRequest('setCollect: enabled must be a boolean')
+            }
+            await ctx.rewrite.saveCollection(enabled)
+            return { ok: true, value: enabled }
+          }
           default:
             return badRequest(`unknown endpoint ${JSON.stringify(endpoint)}`)
         }

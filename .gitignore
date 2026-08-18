@@ -1,6 +1,9 @@
 # 依赖
 node_modules/
 
+# awesome-dsh-plugin 收录提交草稿（本地参考，不随仓库/包发布）
+.submission/
+
 # 日志
 *.log
 npm-debug.log*
