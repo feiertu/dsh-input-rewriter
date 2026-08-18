@@ -73,11 +73,15 @@ export function createRewriter(options: CreateRewriterOptions): Rewriter {
 
       const controller = new AbortController()
       let timedOut = false
+      let cancelled = false
       const timer = setTimeout(() => {
         timedOut = true
         controller.abort(new Error(`改写超时（${timeoutMs}ms）`))
       }, timeoutMs)
-      const propagate = () => controller.abort(signal?.reason)
+      const propagate = () => {
+        cancelled = true
+        controller.abort(signal?.reason)
+      }
       if (signal !== undefined) {
         if (signal.aborted) propagate()
         else signal.addEventListener('abort', propagate, { once: true })
@@ -95,8 +99,13 @@ export function createRewriter(options: CreateRewriterOptions): Rewriter {
         }
         return { ok: true, rewritten: recombine(result, attachments), scenes }
       } catch (error) {
+        if (timedOut) {
+          const message = error instanceof Error ? error.message : String(error)
+          return { ok: false, code: 'timeout', message }
+        }
+        if (cancelled) return { ok: false, code: 'llm-failed', message: '改写已取消' }
         const message = error instanceof Error ? error.message : String(error)
-        return { ok: false, code: timedOut ? 'timeout' : 'llm-failed', message }
+        return { ok: false, code: 'llm-failed', message }
       } finally {
         clearTimeout(timer)
         signal?.removeEventListener('abort', propagate)

@@ -1,7 +1,7 @@
 //#region src/rewrite/engine.d.ts
 /**
  * 改写引擎的纯函数面：场景 taxonomy、多场景识别启发式、系统 prompt 组装、
- * 文本提取与 finish 校验。不碰 I/O，便于单测与复用。
+ * 附件分段与拼回。不碰 I/O，便于单测与复用。
  */
 /** 场景 id，与 skills/*.md 的 playbook 一一对应。 */
 type SceneId = 'daily-life' | 'work' | 'academic' | 'coding' | 'creative' | 'security-audit' | 'general';

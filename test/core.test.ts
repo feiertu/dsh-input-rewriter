@@ -59,4 +59,17 @@ describe('createRewriter.rewrite', () => {
     const result = await pending
     expect(result).toMatchObject({ ok: false, code: 'timeout' })
   })
+
+  it('外部 signal 取消映射 llm-failed 且消息精确', async () => {
+    const llm: LlmLike = {
+      complete: ({ signal }) => new Promise<string>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      }),
+    }
+    const rewriter = createRewriter({ llm, playbooks })
+    const controller = new AbortController()
+    const pending = rewriter.rewrite('hello', controller.signal)
+    controller.abort()
+    await expect(pending).resolves.toEqual({ ok: false, code: 'llm-failed', message: '改写已取消' })
+  })
 })
