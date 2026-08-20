@@ -9,18 +9,23 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 /** 改写模型设置命名空间。 */
 export const REWRITE_MODEL_SETTINGS_NAMESPACE = settingsNamespace('input-rewriter')
 
-/** 设置段内容；provider/model 缺省表示尚未选择改写模型，collectEnabled 控制是否采集微调样本。 */
+/** 自动改写防抖时间的默认值（毫秒）。 */
+export const DEFAULT_DEBOUNCE_MS = 2000
+
+/** 设置段内容；provider/model 缺省表示尚未选择改写模型，collectEnabled 控制是否采集微调样本，debounceMs 控制自动改写的防抖时间。 */
 export interface RewriteModelSettings {
   provider?: string
   model?: string
   collectEnabled?: boolean
+  debounceMs?: number
 }
 
-/** 设置段 schema（provider/model 允许「未选择」状态；collectEnabled 缺省关闭）。 */
+/** 设置段 schema（provider/model 允许「未选择」状态；collectEnabled 缺省关闭；debounceMs 范围 200–10000ms）。 */
 export const REWRITE_MODEL_SETTINGS_SCHEMA: z<RewriteModelSettings> = z.object({
   provider: z.string(),
   model: z.string(),
   collectEnabled: z.boolean().default(false),
+  debounceMs: z.number().min(200).max(10000).step(100).default(DEFAULT_DEBOUNCE_MS),
 })
 
 /** 是否已构成可用选择（provider 与 model 均非空）。 */

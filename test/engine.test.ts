@@ -55,6 +55,18 @@ describe('buildSystemPrompt', () => {
     expect(s).toContain('PLAYBOOK_A')
     expect(s).toContain('只输出改写后的 prompt 文本本身')
   })
+
+  it('#1 寒暄/非诉求输入直接原样返回', () => {
+    const s = buildSystemPrompt([])
+    expect(s).toContain('不构成明确诉求')
+    expect(s).toContain('直接原样输出输入本身')
+  })
+
+  it('#3 句子层次不明用编号/缩进分层并给被指代原文加双引号', () => {
+    const s = buildSystemPrompt([])
+    expect(s).toContain('用编号与缩进把层级划分清楚')
+    expect(s).toContain('用双引号把该原文包起来')
+  })
 })
 
 describe('buildUserText', () => {

@@ -85,6 +85,17 @@ export function registerRewriteRpc(ctx: Context): void {
             await ctx.rewrite.saveCollection(enabled)
             return { ok: true, value: enabled }
           }
+          case 'getDebounce': {
+            return { ok: true, value: ctx.rewrite.currentDebounceMs() }
+          }
+          case 'setDebounce': {
+            const ms = (payload as { ms?: unknown } | null)?.ms
+            if (typeof ms !== 'number' || !Number.isFinite(ms)) {
+              return badRequest('setDebounce: ms must be a finite number')
+            }
+            await ctx.rewrite.saveDebounce(ms)
+            return { ok: true, value: ctx.rewrite.currentDebounceMs() }
+          }
           default:
             return badRequest(`unknown endpoint ${JSON.stringify(endpoint)}`)
         }

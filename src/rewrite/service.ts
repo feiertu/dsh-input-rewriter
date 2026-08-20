@@ -15,6 +15,7 @@ import { createRewriter, type LlmLike, type Playbook, type Rewriter } from '../c
 import { dshLlmLike } from './llm'
 import type { SceneId } from './engine'
 import {
+  DEFAULT_DEBOUNCE_MS,
   isModelSelectionConfigured,
   REWRITE_MODEL_SETTINGS_NAMESPACE,
   REWRITE_MODEL_SETTINGS_SCHEMA,
@@ -65,7 +66,12 @@ export class RewriteService extends Service {
   constructor(ctx: Context, config: RewriteServiceConfig) {
     super(ctx, 'rewrite')
 
-    const entry: RewriteModelSettings = { provider: config.provider, model: config.model, collectEnabled: false }
+    const entry: RewriteModelSettings = {
+      provider: config.provider,
+      model: config.model,
+      collectEnabled: false,
+      debounceMs: DEFAULT_DEBOUNCE_MS,
+    }
     this.source = () => entry
     installSettingsSection(ctx, REWRITE_MODEL_SETTINGS_NAMESPACE, REWRITE_MODEL_SETTINGS_SCHEMA, entry, {
       setSource: (current) => { this.source = current },
@@ -126,6 +132,18 @@ export class RewriteService extends Service {
   /** 持久化采集开关（未挂载 settings 时静默忽略）。 */
   async saveCollection(enabled: boolean): Promise<void> {
     await this.ctx.get('settings')?.update(REWRITE_MODEL_SETTINGS_NAMESPACE, { collectEnabled: enabled })
+  }
+
+  /** 当前生效的自动改写防抖时间（毫秒）；未配置时回落默认值。 */
+  currentDebounceMs(): number {
+    const value = this.source().debounceMs
+    return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_DEBOUNCE_MS
+  }
+
+  /** 持久化自动改写防抖时间；夹取到 [200, 10000] 并取整到 100 的倍数以匹配 schema。 */
+  async saveDebounce(ms: number): Promise<void> {
+    const clamped = Math.min(10000, Math.max(200, Math.round(ms / 100) * 100))
+    await this.ctx.get('settings')?.update(REWRITE_MODEL_SETTINGS_NAMESPACE, { debounceMs: clamped })
   }
 
   /**

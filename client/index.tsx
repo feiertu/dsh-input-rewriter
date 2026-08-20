@@ -31,8 +31,19 @@ export const inject = ['slots', 'connection']
 /** 宿主↔浏览器逻辑 RPC 通道（与宿主面 src/rpc.ts 一致）。 */
 const RPC_CHANNEL = '/input-rewriter'
 
-/** 自动改写的防抖窗口（草稿停止变化多久后触发）。 */
-const DEBOUNCE_MS = 2000
+/** 自动改写防抖时间默认值（毫秒），与宿主 settings schema 的 default 一致。 */
+const DEFAULT_DEBOUNCE_MS = 2000
+
+/** 模块级防抖时间存储：预览条与设置段共享，改动即时生效。 */
+let storedDebounceMs = DEFAULT_DEBOUNCE_MS
+const debounceListeners = new Set<(ms: number) => void>()
+
+/** 更新共享防抖时间并通知订阅者（设置段写入后调用）。 */
+function setStoredDebounceMs(ms: number): void {
+  if (!Number.isFinite(ms)) return
+  storedDebounceMs = ms
+  debounceListeners.forEach((listener) => listener(ms))
+}
 
 /** 改写结果线类型（与宿主面 RewriteResult 对齐）。 */
 type RewriteOutcome =
@@ -130,6 +141,7 @@ function createDock(ctx: Context) {
     const [busy, setBusy] = useState(false)
     const [preview, setPreview] = useState<{ original: string; rewritten: string } | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [debounceMs, setDebounceMs] = useState(storedDebounceMs)
 
     // 防抖计时器、在途请求控制器、用户「×」取消的草稿快照。
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -180,7 +192,24 @@ function createDock(ctx: Context) {
       })
     }, [ctx])
 
-    // 草稿停止变化 DEBOUNCE_MS 后自动触发改写；变化期间取消在途请求、复位 busy。
+    // 读取持久化防抖值，并订阅设置段的即时变更（设置页改完后预览条立刻生效）。
+    useEffect(() => {
+      let cancelled = false
+      void connection(ctx).rpc.call(RPC_CHANNEL, 'getDebounce', null)
+        .then((outcome) => {
+          if (cancelled || !outcome.ok || typeof outcome.value !== 'number') return
+          setStoredDebounceMs(outcome.value)
+        })
+        .catch(() => { /* 读取失败保持默认值。 */ })
+      const listener = (ms: number): void => setDebounceMs(ms)
+      debounceListeners.add(listener)
+      return () => {
+        cancelled = true
+        debounceListeners.delete(listener)
+      }
+    }, [ctx])
+
+    // 草稿停止变化 debounceMs 后自动触发改写；变化期间取消在途请求、复位 busy。
     useEffect(() => {
       const text = draft.trim()
       if (text.length === 0) {
@@ -194,9 +223,9 @@ function createDock(ctx: Context) {
       if (preview !== null && preview.original === draft) return
       controllerRef.current?.abort()
       setBusy(false)
-      const timer = setTimeout(() => { void runRewrite(text) }, DEBOUNCE_MS)
+      const timer = setTimeout(() => { void runRewrite(text) }, debounceMs)
       return () => { clearTimeout(timer) }
-    }, [draft, preview, runRewrite])
+    }, [draft, preview, runRewrite, debounceMs])
 
     // 观察发送：session.nodes 出现新的 user/steering 消息即视为一次发送，采集原文。
     useEffect(() => {
@@ -280,6 +309,7 @@ function createModelSection(ctx: Context) {
     const [collectEnabled, setCollectEnabled] = useState(false)
     const [exportBusy, setExportBusy] = useState(false)
     const [collectPath, setCollectPath] = useState<string | null>(null)
+    const [debounceInput, setDebounceInput] = useState(String(storedDebounceMs))
 
     useEffect(() => {
       let cancelled = false
@@ -307,6 +337,13 @@ function createModelSection(ctx: Context) {
           if (cancelled) return
           if (collectOutcome.ok && typeof collectOutcome.value === 'boolean') {
             setCollectEnabled(collectOutcome.value)
+          }
+
+          const debounceOutcome = await conn.rpc.call(RPC_CHANNEL, 'getDebounce', null)
+          if (cancelled) return
+          if (debounceOutcome.ok && typeof debounceOutcome.value === 'number') {
+            setDebounceInput(String(debounceOutcome.value))
+            setStoredDebounceMs(debounceOutcome.value)
           }
         } catch (err) {
           if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -347,6 +384,26 @@ function createModelSection(ctx: Context) {
         }
       } catch (err) {
         setCollectEnabled(!next)
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    }
+
+    const commitDebounce = async (): Promise<void> => {
+      const parsed = Number(debounceInput)
+      if (!Number.isFinite(parsed)) {
+        setDebounceInput(String(storedDebounceMs))
+        return
+      }
+      const clamped = Math.min(10000, Math.max(200, Math.round(parsed / 100) * 100))
+      setDebounceInput(String(clamped))
+      try {
+        const outcome = await connection(ctx).rpc.call(RPC_CHANNEL, 'setDebounce', { ms: clamped })
+        if (!outcome.ok) {
+          setError(outcome.error.message)
+          return
+        }
+        setStoredDebounceMs(clamped)
+      } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
     }
@@ -407,6 +464,21 @@ function createModelSection(ctx: Context) {
             )}
         {error !== null && <div style={errorStyle}>{error}</div>}
         <p style={mutedStyle}>选中的模型仅用于「输入改写」，不会改变对话主模型。</p>
+
+        <label htmlFor="input-rewriter-debounce" style={sectionLabelStyle}>自动改写等待时间（毫秒）</label>
+        <input
+          id="input-rewriter-debounce"
+          type="number"
+          min={200}
+          max={10000}
+          step={100}
+          value={debounceInput}
+          onChange={(event) => setDebounceInput(event.currentTarget.value)}
+          onBlur={() => { void commitDebounce() }}
+          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
+          style={numberInputStyle}
+        />
+        <p style={mutedStyle}>停止输入多久后自动触发改写，范围 200–10000ms，步进 100。</p>
 
         <label style={checkboxRowStyle}>
           <input
@@ -521,6 +593,16 @@ const sectionLabelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color:
 
 const selectStyle: CSSProperties = {
   maxWidth: 360,
+  padding: '7px 10px',
+  borderRadius: 8,
+  border: '1px solid var(--dsw-alias-border-l2)',
+  background: 'var(--dsw-specific-input-major)',
+  color: 'var(--dsw-alias-label-primary)',
+  fontSize: 13,
+}
+
+const numberInputStyle: CSSProperties = {
+  width: 160,
   padding: '7px 10px',
   borderRadius: 8,
   border: '1px solid var(--dsw-alias-border-l2)',
