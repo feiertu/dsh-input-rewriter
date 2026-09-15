@@ -5,10 +5,9 @@ import {
 } from '../src/settings'
 
 describe('REWRITE_MODEL_SETTINGS_SCHEMA', () => {
-  it('缺省 debounceMs 为 2000、collectEnabled 为 false', () => {
+  it('缺省 debounceMs 为 2000', () => {
     const out = REWRITE_MODEL_SETTINGS_SCHEMA({ provider: 'deepseek', model: 'deepseek-chat' })
     expect(out.debounceMs).toBe(DEFAULT_DEBOUNCE_MS)
-    expect(out.collectEnabled).toBe(false)
   })
 
   it('越界 debounceMs（低于下限）抛校验错误', () => {

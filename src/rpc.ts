@@ -1,6 +1,6 @@
 /**
  * 宿主面 RPC：在 `connection.rpc` 上注册 `/input-rewriter` 通道，
- * 浏览器面经 `connection.rpc.call` 访问 rewrite/models/getModel/setModel 四个端点。
+ * 浏览器面经 `connection.rpc.call` 访问改写、模型选择、防抖设置等端点。
  * 传输层错误走 `bad-request`/`internal`，业务结果（含改写失败）作为 value 返回。
  */
 
@@ -61,29 +61,6 @@ export function registerRewriteRpc(ctx: Context): void {
             }
             await ctx.rewrite.saveSelection({ provider: next.provider, model: next.model })
             return { ok: true, value: { provider: next.provider, model: next.model } }
-          }
-          case 'collect': {
-            const output = (payload as { output?: unknown } | null)?.output
-            if (typeof output !== 'string' || output.trim().length === 0) {
-              return badRequest('collect: output must be a non-empty string')
-            }
-            const collected = await ctx.rewrite.collect(output)
-            return { ok: true, value: { collected } }
-          }
-          case 'export': {
-            const exported = await ctx.rewrite.exportCollected()
-            return { ok: true, value: exported }
-          }
-          case 'getCollect': {
-            return { ok: true, value: ctx.rewrite.isCollectionEnabled() }
-          }
-          case 'setCollect': {
-            const enabled = (payload as { enabled?: unknown } | null)?.enabled
-            if (typeof enabled !== 'boolean') {
-              return badRequest('setCollect: enabled must be a boolean')
-            }
-            await ctx.rewrite.saveCollection(enabled)
-            return { ok: true, value: enabled }
           }
           case 'getDebounce': {
             return { ok: true, value: ctx.rewrite.currentDebounceMs() }
