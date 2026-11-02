@@ -67,6 +67,17 @@ describe('buildSystemPrompt', () => {
     expect(s).toContain('用编号与缩进把层级划分清楚')
     expect(s).toContain('用双引号把该原文包起来')
   })
+
+  it('#4 全局改写规则：第一人称、占位符补全、矛盾取舍、多轮上下文', () => {
+    const s = buildSystemPrompt([])
+    expect(s).toContain('以用户为第一人称视角')
+    expect(s).toContain('忽略或降低修辞本身的权重')
+    expect(s).toContain('先梳理出其真实意思')
+    expect(s).toContain('以被着重标记的那一个为准')
+    expect(s).toContain('缺失的信息用占位符')
+    expect(s).toContain('要么直接舍弃不写入')
+    expect(s).toContain('避免画蛇添足')
+  })
 })
 
 describe('buildUserText', () => {

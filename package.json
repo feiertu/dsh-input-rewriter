@@ -1,6 +1,6 @@
 {
   "name": "dsh-input-rewriter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DeepSeek Harness 插件：发送前用提示词工程 playbook 自动改写用户输入为更优 prompt。官方 bundle 插件，dsh plugin --profile web add",
   "type": "module",
   "main": "lib/index.js",
