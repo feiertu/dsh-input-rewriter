@@ -78,6 +78,14 @@ describe('buildSystemPrompt', () => {
     expect(s).toContain('要么直接舍弃不写入')
     expect(s).toContain('避免画蛇添足')
   })
+
+  it('#5 全局改写规则：人称指代下游模型、客观陈述不臆造、难懂内容也要重组', () => {
+    const s = buildSystemPrompt([])
+    expect(s).toContain('指代的是下游执行模型')
+    expect(s).toContain('不要凭空构造任务')
+    expect(s).toContain('不得因此只加')
+    expect(s).toContain('诉求前置 + 难懂原文原样保留 + 其余补全')
+  })
 })
 
 describe('buildUserText', () => {
